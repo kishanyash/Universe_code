@@ -1,0 +1,18 @@
+Populated: 150
+Missing (16):
+ - asset_turnover_ratio
+ - ebitda_fy2028e
+ - ebitda_fy28
+ - ebitda_margin_fy2028e
+ - eps_fy2028e
+ - ev_ebitda_fy2028e
+ - last_annual_result_date
+ - pat_fy2028e
+ - pat_fy28
+ - pat_margin_fy2028e
+ - pe_fy2028e
+ - pe_fy28
+ - ps_fy2028e
+ - revenue_fy2028e
+ - revenue_fy28
+ - sotp_value

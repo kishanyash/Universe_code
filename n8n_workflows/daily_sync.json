@@ -1,0 +1,246 @@
+{
+  "name": "Daily Stock Data Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 1,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "daily-cron",
+      "name": "Daily Trigger (6:30 AM IST)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        250,
+        300
+      ],
+      "notes": "Runs daily at 01:00 UTC = 06:30 IST. Sources: yahoo_finance + screener_daily.\nUpdates: current_price, market_cap, volume, 52w high/low, returns, enterprise_value, dividend_yield, TTM P&L, ratios, balance sheet, quarterly results, sectors, shareholding."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://72.61.226.16:5001/webhook/daily",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Secret",
+              "value": "change-me-in-production"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"async\": true\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "daily-http",
+      "name": "Trigger Daily Sync",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "condition-started",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "started",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "daily-check",
+      "name": "Job Started?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Wait 60 seconds before polling\nawait new Promise(r => setTimeout(r, 60000));\n\nconst jobId = $('Trigger Daily Sync').first().json.job_id;\nconst resp = await this.helpers.httpRequest({\n  method: 'GET',\n  url: `http://72.61.226.16:5001/job/${jobId}`,\n  returnFullResponse: false,\n});\n\nreturn [{ json: resp }];"
+      },
+      "id": "daily-poll",
+      "name": "Poll Job Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "condition-running",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "running",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "daily-still-running",
+      "name": "Still Running?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "message",
+              "value": "✅ Daily sync completed successfully!\nJob ID: {{ $json.job_id }}\nResult: {{ JSON.stringify($json.result) }}"
+            }
+          ]
+        }
+      },
+      "id": "daily-success",
+      "name": "✅ Success",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1360,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "message",
+              "value": "❌ Daily sync failed!\nStatus: {{ $json.status }}\nError: {{ $json.error || 'Unknown error' }}"
+            }
+          ]
+        }
+      },
+      "id": "daily-error",
+      "name": "❌ Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        920,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger (6:30 AM IST)": {
+      "main": [
+        [
+          {
+            "node": "Trigger Daily Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Daily Sync": {
+      "main": [
+        [
+          {
+            "node": "Job Started?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job Started?": {
+      "main": [
+        [
+          {
+            "node": "Poll Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll Job Status": {
+      "main": [
+        [
+          {
+            "node": "Still Running?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still Running?": {
+      "main": [
+        [
+          {
+            "node": "Poll Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "✅ Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "stock-data"
+    },
+    {
+      "name": "daily"
+    }
+  ]
+}

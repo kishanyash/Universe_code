@@ -1,0 +1,17 @@
+{
+  "props": {
+    "pageProps": {
+      "metaData": null
+    },
+    "__N_SSG": true
+  },
+  "page": "/companyinfo/[fincodeLink]",
+  "query": {
+    "fincodeLink": "RELIANCE"
+  },
+  "buildId": "PgY3nUxMAX75wElL7fU8C",
+  "isFallback": false,
+  "isExperimentalCompile": false,
+  "gsp": true,
+  "scriptLoader": []
+}

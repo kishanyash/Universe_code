@@ -1,0 +1,247 @@
+{
+    "name": "Weekly Stock Data Sync",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "triggerAtHour": 2,
+                            "triggerAtMinute": 0,
+                            "triggerAtDay": 1
+                        }
+                    ]
+                }
+            },
+            "id": "weekly-cron",
+            "name": "Weekly Trigger (Mon 7:30 AM IST)",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [
+                250,
+                300
+            ],
+            "notes": "Runs every Monday at 02:00 UTC = 07:30 IST. Source: screener_full.\nUpdates: All Screener.in data including per-FY financials (revenue/ebitda/pat/eps for FY23-FY25), ratios, balance sheet, quarterly P&L, shareholding, sectors."
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://72.61.226.16:5001/webhook/weekly",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "X-API-Secret",
+                            "value": "change-me-in-production"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "{\n  \"async\": true\n}",
+                "options": {
+                    "timeout": 30000
+                }
+            },
+            "id": "weekly-http",
+            "name": "Trigger Weekly Sync",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                480,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "conditions": [
+                        {
+                            "id": "condition-started",
+                            "leftValue": "={{ $json.status }}",
+                            "rightValue": "started",
+                            "operator": {
+                                "type": "string",
+                                "operation": "equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                }
+            },
+            "id": "weekly-check",
+            "name": "Job Started?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                700,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Wait 120 seconds before polling (screener_full is slower)\nawait new Promise(r => setTimeout(r, 120000));\n\nconst jobId = $('Trigger Weekly Sync').first().json.job_id;\nconst resp = await this.helpers.httpRequest({\n  method: 'GET',\n  url: `http://72.61.226.16:5001/job/${jobId}`,\n  returnFullResponse: false,\n});\n\nreturn [{ json: resp }];"
+            },
+            "id": "weekly-poll",
+            "name": "Poll Job Status",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                920,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "conditions": [
+                        {
+                            "id": "condition-running",
+                            "leftValue": "={{ $json.status }}",
+                            "rightValue": "running",
+                            "operator": {
+                                "type": "string",
+                                "operation": "equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                }
+            },
+            "id": "weekly-still-running",
+            "name": "Still Running?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                1140,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "values": {
+                    "string": [
+                        {
+                            "name": "message",
+                            "value": "✅ Weekly sync completed successfully!\nJob ID: {{ $json.job_id }}\nResult: {{ JSON.stringify($json.result) }}"
+                        }
+                    ]
+                }
+            },
+            "id": "weekly-success",
+            "name": "✅ Success",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1360,
+                200
+            ]
+        },
+        {
+            "parameters": {
+                "values": {
+                    "string": [
+                        {
+                            "name": "message",
+                            "value": "❌ Weekly sync failed!\nStatus: {{ $json.status }}\nError: {{ $json.error || 'Unknown error' }}"
+                        }
+                    ]
+                }
+            },
+            "id": "weekly-error",
+            "name": "❌ Error",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                920,
+                500
+            ]
+        }
+    ],
+    "connections": {
+        "Weekly Trigger (Mon 7:30 AM IST)": {
+            "main": [
+                [
+                    {
+                        "node": "Trigger Weekly Sync",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Trigger Weekly Sync": {
+            "main": [
+                [
+                    {
+                        "node": "Job Started?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Job Started?": {
+            "main": [
+                [
+                    {
+                        "node": "Poll Job Status",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "❌ Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Poll Job Status": {
+            "main": [
+                [
+                    {
+                        "node": "Still Running?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Still Running?": {
+            "main": [
+                [
+                    {
+                        "node": "Poll Job Status",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "✅ Success",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "tags": [
+        {
+            "name": "stock-data"
+        },
+        {
+            "name": "weekly"
+        }
+    ]
+}

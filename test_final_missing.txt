@@ -1,0 +1,7 @@
+Populated: 161
+Missing (5):
+  - bse_code
+  - company_name
+  - isin_code
+  - nse_code
+  - updated_at

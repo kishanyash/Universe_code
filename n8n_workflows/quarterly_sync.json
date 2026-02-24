@@ -1,0 +1,271 @@
+{
+    "name": "Quarterly Stock Data Sync (Full Refresh)",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "triggerAtHour": 4,
+                            "triggerAtMinute": 0,
+                            "triggerAtDayOfMonth": 1
+                        }
+                    ]
+                }
+            },
+            "id": "quarterly-cron",
+            "name": "Monthly Trigger (1st of every month)",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [
+                250,
+                300
+            ],
+            "notes": "Runs on 1st of every month at 04:00 UTC = 09:30 IST.\nThe Code node filters for quarterly months only (Jan, Apr, Jul, Oct).\nSources: trendlyne + go_india_stocks + screener_full (FULL REFRESH).\nUpdates: ALL columns in equity_universe."
+        },
+        {
+            "parameters": {
+                "jsCode": "const now = new Date();\nconst month = now.getMonth() + 1;\nconst quarterlyMonths = [1, 4, 7, 10];\n\nif (quarterlyMonths.includes(month)) {\n  return [{ json: { proceed: true, month: month, quarter: `Q${Math.ceil(month/3)}` } }];\n}\n\n// Not a quarterly month — stop execution\nreturn [];"
+            },
+            "id": "quarterly-filter",
+            "name": "Filter Quarterly Months",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                480,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://72.61.226.16:5001/webhook/quarterly",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "X-API-Secret",
+                            "value": "change-me-in-production"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "{\n  \"async\": true\n}",
+                "options": {
+                    "timeout": 30000
+                }
+            },
+            "id": "quarterly-http",
+            "name": "Trigger Quarterly Sync",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                700,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "conditions": [
+                        {
+                            "id": "condition-started",
+                            "leftValue": "={{ $json.status }}",
+                            "rightValue": "started",
+                            "operator": {
+                                "type": "string",
+                                "operation": "equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                }
+            },
+            "id": "quarterly-check",
+            "name": "Job Started?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                920,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Wait 300 seconds before polling (quarterly full refresh is the longest job)\nawait new Promise(r => setTimeout(r, 300000));\n\nconst jobId = $('Trigger Quarterly Sync').first().json.job_id;\nconst resp = await this.helpers.httpRequest({\n  method: 'GET',\n  url: `http://72.61.226.16:5001/job/${jobId}`,\n  returnFullResponse: false,\n});\n\nreturn [{ json: resp }];"
+            },
+            "id": "quarterly-poll",
+            "name": "Poll Job Status",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1140,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "conditions": [
+                        {
+                            "id": "condition-running",
+                            "leftValue": "={{ $json.status }}",
+                            "rightValue": "running",
+                            "operator": {
+                                "type": "string",
+                                "operation": "equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                }
+            },
+            "id": "quarterly-still-running",
+            "name": "Still Running?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                1360,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "values": {
+                    "string": [
+                        {
+                            "name": "message",
+                            "value": "✅ Quarterly FULL REFRESH completed!\nJob ID: {{ $json.job_id }}\nResult: {{ JSON.stringify($json.result) }}"
+                        }
+                    ]
+                }
+            },
+            "id": "quarterly-success",
+            "name": "✅ Success",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1580,
+                200
+            ]
+        },
+        {
+            "parameters": {
+                "values": {
+                    "string": [
+                        {
+                            "name": "message",
+                            "value": "❌ Quarterly sync failed!\nStatus: {{ $json.status }}\nError: {{ $json.error || 'Unknown error' }}"
+                        }
+                    ]
+                }
+            },
+            "id": "quarterly-error",
+            "name": "❌ Error",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1140,
+                500
+            ]
+        }
+    ],
+    "connections": {
+        "Monthly Trigger (1st of every month)": {
+            "main": [
+                [
+                    {
+                        "node": "Filter Quarterly Months",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Filter Quarterly Months": {
+            "main": [
+                [
+                    {
+                        "node": "Trigger Quarterly Sync",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Trigger Quarterly Sync": {
+            "main": [
+                [
+                    {
+                        "node": "Job Started?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Job Started?": {
+            "main": [
+                [
+                    {
+                        "node": "Poll Job Status",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "❌ Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Poll Job Status": {
+            "main": [
+                [
+                    {
+                        "node": "Still Running?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Still Running?": {
+            "main": [
+                [
+                    {
+                        "node": "Poll Job Status",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "✅ Success",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "tags": [
+        {
+            "name": "stock-data"
+        },
+        {
+            "name": "quarterly"
+        }
+    ]
+}
