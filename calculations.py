@@ -290,6 +290,9 @@ def calculate_derived_fields(data):
         ('pat_fy2026e', 'pat_fy26'),
         ('pat_fy2027e', 'pat_fy27'),
         ('pat_fy2028e', 'pat_fy28'),
+        ('eps_fy2023', 'eps_fy23'),
+        ('eps_fy2024', 'eps_fy24'),
+        ('eps_fy2025', 'eps_fy25'),
     ]
     
     for long_name, short_name in sync_pairs:

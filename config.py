@@ -42,7 +42,7 @@ SCHEDULES = {
     "daily":     ["yahoo_finance", "screener_daily"],
     "weekly":    ["screener_full"],
     "biweekly":  ["trendlyne", "go_india_stocks"],
-    "quarterly": ["screener_full"],
+    "quarterly": ["yahoo_finance", "screener_full", "trendlyne", "go_india_stocks"],
 }
 
 # ─── Batch Processing Config ────────────────────────────────────
@@ -92,7 +92,7 @@ VALID_COLUMNS = {
     # Market data
     "market_cap", "current_price", "high_52_week", "low_52_week",
     "volume", "face_value", "book_value", "dividend_yield",
-    "num_equity_shares", "enterprise_value",
+    "num_equity_shares", "enterprise_value", "beta",
     # Valuation
     "pe_ttm", "ev_ebitda_ttm", "ps_ttm",
     "pe_avg_3yr", "pe_avg_5yr", "pe_high_hist", "pe_low_hist",
@@ -127,6 +127,10 @@ VALID_COLUMNS = {
     "revenue_cagr_fwd_2yr", "ebitda_cagr_fwd_2yr",
     "pat_cagr_fwd_2yr", "eps_cagr_fwd_2yr",
     # Per-FY actuals (long naming)
+    "revenue_fy2021", "revenue_fy2022",
+    "ebitda_fy2021", "ebitda_fy2022",
+    "pat_fy2021", "pat_fy2022",
+    "eps_fy2021", "eps_fy2022",
     "revenue_fy2023", "revenue_fy2024", "revenue_fy2025",
     "ebitda_fy2023", "ebitda_fy2024", "ebitda_fy2025",
     "pat_fy2023", "pat_fy2024", "pat_fy2025",
@@ -143,6 +147,7 @@ VALID_COLUMNS = {
     "ebitda_fy26", "ebitda_fy27", "ebitda_fy28",
     "pat_fy23", "pat_fy24", "pat_fy25",
     "pat_fy26", "pat_fy27", "pat_fy28",
+    "eps_fy23", "eps_fy24", "eps_fy25",
     # Per-FY margins
     "ebitda_margin_fy2023", "ebitda_margin_fy2024", "ebitda_margin_fy2025",
     "ebitda_margin_fy2026e", "ebitda_margin_fy2027e", "ebitda_margin_fy2028e",

@@ -70,7 +70,8 @@ def fetch_all_companies(supabase, limit=None, offset=0, isin_list=None):
 def update_company(supabase, isin_code, data):
     """
     Update a single company in equity_universe by ISIN.
-    Filters out any fields not in VALID_COLUMNS before writing.
+    Filters out unknown fields, merges fresh scraper data with the existing
+    DB row, then recalculates derived fields before writing.
     """
     if not data:
         return False
@@ -79,21 +80,39 @@ def update_company(supabase, isin_code, data):
     dropped = {k for k in data if k not in VALID_COLUMNS}
     if dropped:
         logger.debug(f"Dropping unknown columns for {isin_code}: {dropped}")
-    filtered = {k: v for k, v in data.items() if k in VALID_COLUMNS}
+    fresh = {k: v for k, v in data.items() if k in VALID_COLUMNS and v is not None}
     
-    if not filtered:
+    if not fresh:
         return False
     
     # Clean bse_code before writing to DB — prevent .0 suffix
-    if "bse_code" in filtered and filtered["bse_code"]:
-        filtered["bse_code"] = clean_bse_code(filtered["bse_code"])
+    if "bse_code" in fresh and fresh["bse_code"]:
+        fresh["bse_code"] = clean_bse_code(fresh["bse_code"])
     
+    try:
+        existing_resp = supabase.table(SUPABASE_TABLE).select("*").eq(
+            "isin_code", isin_code
+        ).limit(1).execute()
+        existing = existing_resp.data[0] if existing_resp.data else {}
+    except Exception as e:
+        logger.warning(
+            f"Could not fetch existing row for {isin_code}; "
+            f"calculating from fresh data only: {e}"
+        )
+        existing = {}
+
+    merged = {k: v for k, v in existing.items() if k in VALID_COLUMNS and v is not None}
+    merged.update(fresh)
+    merged = calculate_derived_fields(merged)
+
+    filtered = {k: v for k, v in merged.items() if k in VALID_COLUMNS and v is not None}
     filtered["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     try:
         supabase.table(SUPABASE_TABLE).update(filtered).eq(
             "isin_code", isin_code
         ).execute()
+        logger.info(f"DB updated for {isin_code}: {len(filtered)} fields")
         return True
     except Exception as e:
         logger.error(f"DB update failed for {isin_code}: {e}")
@@ -180,7 +199,6 @@ def process_batch(supabase, companies, source_name):
         
         # Calculate derived fields and write batch results to Supabase
         for isin, data in results_to_write:
-            data = calculate_derived_fields(data)
             if update_company(supabase, isin, data):
                 success += 1
             else:
@@ -302,7 +320,6 @@ def run_single_stock(isin_code, sources=None):
     
     # Calculate derived fields and write combined results
     if combined_data:
-        combined_data = calculate_derived_fields(combined_data)
         update_company(supabase, isin_code, combined_data)
     
     return {
