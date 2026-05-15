@@ -1,6 +1,10 @@
 """
 Check Yahoo Finance for estimates
 """
+if __name__ != "__main__":
+    import pytest
+    pytest.skip("utility script; not a pytest test module", allow_module_level=True)
+
 import yfinance as yf
 ticker = yf.Ticker("RELIANCE.NS")
 info = ticker.info

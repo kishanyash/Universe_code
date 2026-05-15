@@ -16,6 +16,7 @@ Endpoints:
 """
 import os
 import sys
+import hmac
 import logging
 import threading
 from datetime import datetime, timezone
@@ -41,10 +42,18 @@ _running_jobs = {}
 
 
 def verify_secret(req):
-    """Verify API secret from header or query param."""
-    secret = req.headers.get("X-API-Secret") or req.args.get("secret")
-    if API_SECRET != "change-me-in-production" and secret != API_SECRET:
+    """Verify API secret from request header."""
+    if not API_SECRET or API_SECRET == "change-me-in-production":
+        logger.error("API_SECRET is not securely configured. Denying authenticated request.")
         return False
+
+    secret = req.headers.get("X-API-Secret")
+    if not secret:
+        return False
+
+    if not hmac.compare_digest(secret, API_SECRET):
+        return False
+
     return True
 
 
@@ -174,6 +183,9 @@ def webhook_single():
 @app.route("/job/<job_id>", methods=["GET"])
 def job_status(job_id):
     """Check the status of a background job."""
+    if not verify_secret(request):
+        return jsonify({"error": "Unauthorized"}), 401
+
     job = _running_jobs.get(job_id)
     if not job:
         return jsonify({"error": f"Job {job_id} not found"}), 404
@@ -183,6 +195,9 @@ def job_status(job_id):
 @app.route("/sources", methods=["GET"])
 def list_sources():
     """List available scraper sources and schedules."""
+    if not verify_secret(request):
+        return jsonify({"error": "Unauthorized"}), 401
+
     from scrapers import SCRAPER_MAP
     from config import SCHEDULES, BATCH_CONFIG
     

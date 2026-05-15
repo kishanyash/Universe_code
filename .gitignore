@@ -1,0 +1,30 @@
+# Secrets and local environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Python cache and tooling
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local logs and generated outputs
+logs/
+all_fetching.log
+full_test_log.txt
+missing_fields.txt
+ratios_keys.txt
+run_all_output.txt
+test_out.txt
+test_yf_ret.txt
+
+# Debug artifacts
+goindia_debug.json
+goindia_test.png

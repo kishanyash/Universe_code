@@ -1,7 +1,6 @@
 """
 GO INDIA STOCKS SCRAPER
 Supabase columns filled:
-  target_price_high, target_price_low, consensus_target_price
   revenue/ebitda/pat/eps for FY23-FY25 (actuals) and FY26E-FY28E (estimates)
 """
 import time
@@ -53,20 +52,6 @@ def scrape_go_india(company):
             logger.warning(f"GoIndia: Table not found for {name}")
             driver.quit()
             return {}
-
-        # === TARGET PRICES ===
-        try:
-            high = driver.find_element(By.XPATH,
-                '//*[@id="basicID"]/div/div/div/div[2]/div/div[3]/fieldset/div[1]/div/div[2]/div/div[1]/div/span[2]')
-            avg = driver.find_element(By.XPATH,
-                '//*[@id="basicID"]/div/div/div/div[2]/div/div[3]/fieldset/div[1]/div/div[2]/div/div[2]/div/span[2]')
-            low = driver.find_element(By.XPATH,
-                '//*[@id="basicID"]/div/div/div/div[2]/div/div[3]/fieldset/div[1]/div/div[2]/div/div[3]/div/span[2]')
-            result['target_price_high'] = to_float(high.text)
-            result['consensus_target_price'] = to_float(avg.text)
-            result['target_price_low'] = to_float(low.text)
-        except Exception:
-            pass
 
         # === CLICK "ACTUALS & FORWARD ESTIMATES" TAB ===
         try:

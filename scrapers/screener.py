@@ -26,6 +26,7 @@ FIELDS POPULATED:
 """
 import re
 import requests
+from datetime import date, datetime, timedelta
 from bs4 import BeautifulSoup
 from config import SCREENER_HEADERS
 from utils import parse_number, safe_round, find_key, calculate_cagr, clean_bse_code
@@ -81,6 +82,57 @@ def parse_table(soup, section_id):
             data[row_name] = row_values
 
     return data, headers[1:]
+
+
+def _parse_quarter_header(header):
+    """Convert a Screener quarter header like 'Dec 2025' to an ISO date."""
+    try:
+        qtr_date = datetime.strptime(header, "%b %Y").date()
+    except (TypeError, ValueError):
+        return None
+
+    import calendar
+    last_day = calendar.monthrange(qtr_date.year, qtr_date.month)[1]
+    return f"{qtr_date.year}-{qtr_date.month:02d}-{last_day:02d}"
+
+
+def extract_quarterly_results_date(soup):
+    """Read only the latest quarter date from the Screener quarters table."""
+    _, qtr_hdrs = parse_table(soup, 'quarters')
+    if not qtr_hdrs:
+        return None
+    return _parse_quarter_header(qtr_hdrs[-1])
+
+
+def _parse_db_date(value):
+    """Parse a Supabase date/datetime value into a date."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
+    except ValueError:
+        try:
+            return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+
+def should_fetch_after_quarter_check(db_quarterly_date, scraped_quarterly_date, today=None):
+    """
+    Fetch full Screener data only when the stored quarter is stale or changed.
+
+    Rule:
+      current date > database quarterly_results_date + 100 days
+      OR database quarterly_results_date != scraped quarterly_results_date
+    """
+    today = today or date.today()
+    db_date = _parse_db_date(db_quarterly_date)
+    scraped_date = _parse_db_date(scraped_quarterly_date)
+
+    if not db_date or not scraped_date:
+        return True
+
+    return today > db_date + timedelta(days=100) or db_date != scraped_date
 
 
 # FY mapping: Screener header → Supabase column suffix
@@ -228,17 +280,9 @@ def extract_all_metrics(soup):
         if latest is not None and yoy is not None and yoy != 0:
             result['profit_growth_yoy_qtr'] = safe_round((latest - yoy) / abs(yoy) * 100)
 
-    # Quarterly results date - convert "Dec 2025" to "2025-12-31"
-    if qtr_hdrs:
-        try:
-            from datetime import datetime as dt
-            qtr_date = dt.strptime(qtr_hdrs[-1], "%b %Y")
-            # Use last day of the month
-            import calendar
-            last_day = calendar.monthrange(qtr_date.year, qtr_date.month)[1]
-            result['quarterly_results_date'] = f"{qtr_date.year}-{qtr_date.month:02d}-{last_day:02d}"
-        except (ValueError, IndexError):
-            pass  # Skip if date can't be parsed
+    qtr_result_date = extract_quarterly_results_date(soup)
+    if qtr_result_date:
+        result['quarterly_results_date'] = qtr_result_date
 
     # ==================================================================
     # PROFIT & LOSS (Annual + TTM) - all in Rs Crs
@@ -502,11 +546,20 @@ def scrape_screener_daily(company):
     name = company.get("company_name", "Unknown")
     nse_code = company.get("nse_code")
     bse_code = company.get("bse_code")
+    db_quarterly_date = company.get("quarterly_results_date")
 
     try:
         soup = fetch_screener_page(nse_code, bse_code)
         if not soup:
             logger.warning(f"Screener: {name} - page not found")
+            return {}
+
+        scraped_quarterly_date = extract_quarterly_results_date(soup)
+        if not should_fetch_after_quarter_check(db_quarterly_date, scraped_quarterly_date):
+            logger.info(
+                f"Screener SKIP: {name} - quarterly_results_date unchanged "
+                f"({scraped_quarterly_date}) and DB date is within 100 days"
+            )
             return {}
 
         metrics = extract_all_metrics(soup)

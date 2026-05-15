@@ -1,6 +1,6 @@
 import config
 from scrapers.yahoo_finance import scrape_yahoo_finance
-from scrapers.screener import scrape_screener
+from scrapers.screener import scrape_screener_daily
 from scrapers.trendlyne import scrape_trendlyne
 from calculations import calculate_derived_fields
 
@@ -15,7 +15,7 @@ combined = {}
 try: combined.update(scrape_yahoo_finance(company))
 except Exception as e: print("YF Error:", e)
 
-try: combined.update(scrape_screener(company))
+try: combined.update(scrape_screener_daily(company))
 except Exception as e: print("Screener Error:", e)
 
 try: combined.update(scrape_trendlyne(company))

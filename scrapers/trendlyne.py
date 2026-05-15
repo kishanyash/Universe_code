@@ -1,7 +1,8 @@
 """
 TRENDLYNE SCRAPER
 Supabase columns filled:
-  target_price_high, target_price_low, consensus_target_price
+  target_price_high, target_price_low
+  consensus_target_price is explicitly written as NULL
   revenue/ebitda/pat/eps for FY23-FY25 (actuals) and FY26E-FY27E (estimates)
 """
 import time
@@ -49,7 +50,7 @@ def scrape_trendlyne(company):
     nse_code = company.get("nse_code")
     bse_code = company.get("bse_code")
     name = company.get("company_name", "Unknown")
-    result = {}
+    result = {"consensus_target_price": None, "consensus_upside_pct": None}
 
     if not nse_code and not bse_code:
         logger.warning(f"Trendlyne: No code for {name}")
@@ -76,15 +77,6 @@ def scrape_trendlyne(company):
             time.sleep(1)
             driver.find_element(By.CLASS_NAME, 'ui-menu-item').click()
         time.sleep(random.uniform(2, 3))
-
-        # === TARGET PRICE (from forecaster block) ===
-        try:
-            forecaster = driver.find_element(By.CLASS_NAME, 'forecaster-block')
-            avg_el = forecaster.find_element(By.CLASS_NAME, 'bottom-right').find_element(By.CLASS_NAME, 'right-number')
-            if avg_el.text and avg_el.text[0].isdigit():
-                result['consensus_target_price'] = to_float(avg_el.text)
-        except Exception:
-            pass
 
         # === NAVIGATE TO FINANCIALS ===
         try:

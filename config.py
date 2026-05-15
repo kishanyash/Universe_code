@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ─── Supabase ────────────────────────────────────────────────────
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bmpvcjbfeyvkkbvclwkb.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJtcHZjamJmZXl2a2tidmNsd2tiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5ODk1MzEsImV4cCI6MjA4NDU2NTUzMX0.AJHhRIw1biBsP6aiN-_7VniMxMxPWkmk-Fq6h5SugQo")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 SUPABASE_TABLE = "equity_universe"
 
 # ─── Trendlyne ───────────────────────────────────────────────────
@@ -26,25 +26,20 @@ SCREENER_PASSWORD = os.getenv("SCREENER_PASSWORD", "")
 
 # ─── Flask API ───────────────────────────────────────────────────
 API_PORT = int(os.getenv("API_PORT", "5001"))
-API_SECRET = os.getenv("API_SECRET", "change-me-in-production")
+API_SECRET = os.getenv("API_SECRET", "")
 
 # ─── Schedule → Source Mapping ───────────────────────────────────
-# Each schedule ONLY scrapes what's unique to that frequency.
-# No duplication — saves time and avoids rate limiting.
-#
-# DAILY:      Yahoo Finance only — prices, returns, volume, market cap
-#             (these change every trading day)
-# WEEKLY:     Screener.in full — TTM financials, ratios, balance sheet,
-#             quarterly results, shareholding, sectors, per-FY actuals
-#             (these change at most once a week)
-# BIWEEKLY:   Trendlyne + GoIndiaStocks — analyst target prices,
-#             forward estimates FY26E-FY28E
-#             (analyst consensus updates infrequently)
-# QUARTERLY:  Screener.in full — post-earnings refresh to capture
-#             new quarterly results and updated annual data
-#             (runs Jan/Apr/Jul/Oct after earnings season)
+# DAILY:      Yahoo Finance (when available) + Screener.in daily
+#             Yahoo provides: returns, volume, beta, estimates
+#             Screener provides: price, mcap, 52w, TTM P&L, ratios,
+#             balance sheet, quarters, sectors, shareholding
+#             If Yahoo is rate-limited (429), Screener still covers
+#             all critical daily fields.
+# WEEKLY:     Screener.in full — same as daily + per-FY actuals
+# BIWEEKLY:   Trendlyne + GoIndiaStocks — analyst targets, estimates
+# QUARTERLY:  Screener.in full — post-earnings refresh
 SCHEDULES = {
-    "daily":     ["yahoo_finance"],
+    "daily":     ["yahoo_finance", "screener_daily"],
     "weekly":    ["screener_full"],
     "biweekly":  ["trendlyne", "go_india_stocks"],
     "quarterly": ["screener_full"],

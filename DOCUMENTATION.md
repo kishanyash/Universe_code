@@ -901,9 +901,9 @@ All percentages are stored as **plain numbers** (e.g., 15.5 = 15.5%).
 
 ### Authentication
 
-Header: `X-API-Secret: change-me-in-production`
+Header: `X-API-Secret: <your API_SECRET>`
 
-> ⚠️ When secret = "change-me-in-production", auth is **bypassed**.
+> ⚠️ Requests are rejected if `API_SECRET` is unset or left as `"change-me-in-production"`.
 
 ---
 

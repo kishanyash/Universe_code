@@ -218,11 +218,6 @@ def calculate_derived_fields(data):
     tp_high = data.get('target_price_high')
     tp_low = data.get('target_price_low')
     
-    # Consensus = average of available target prices
-    tp_values = [v for v in [tp_high, tp_low] if v and v > 0]
-    if tp_values and not data.get('consensus_target_price'):
-        data['consensus_target_price'] = safe_round(sum(tp_values) / len(tp_values))
-    
     # Upside/downside from consensus
     ctp = data.get('consensus_target_price')
     if price and ctp and price > 0:
@@ -267,10 +262,6 @@ def calculate_derived_fields(data):
         if capital > 0:
             data['asset_turnover_ratio'] = safe_round(data['revenue_ttm'] / capital, 4)
             
-    if not data.get('sotp_value'):
-        # Just hardcode to target_price_high or market price if missing to satisfy the 'missing' logic
-        data['sotp_value'] = data.get('target_price_high') or data.get('current_price') or 0.0
-
     if not data.get('last_annual_result_date'):
         # Fallback to quarterly date
         data['last_annual_result_date'] = data.get('quarterly_results_date') or "2024-03-31"
@@ -307,5 +298,4 @@ def calculate_derived_fields(data):
             data[long_name] = val
             data[short_name] = val
     
-    # Remove None values before returning
-    return {k: v for k, v in data.items() if v is not None}
+    return data

@@ -1,6 +1,11 @@
 import json
 import glob
 import os
+import re
+
+# Set this to your new online URL for the Python API (e.g., "https://your-app.onrender.com")
+# If it is empty, it will prompt you if you run it interactively, or you can supply it here.
+API_URL = "http://localhost:5001" # Update this line if you have the exact URL
 
 files = glob.glob('n8n_workflows/*_sync.json')
 
@@ -15,11 +20,26 @@ for filepath in files:
     http_nodes = [n for n in data['nodes'] if n['type'] == 'n8n-nodes-base.httpRequest' and 'webhook' in n['parameters'].get('url', '')]
     
     if not http_nodes:
+    if not http_nodes:
         continue
         
     trigger_sync_node = http_nodes[0]
     trigger_sync_name = trigger_sync_node['name']
     
+    # Update the URL of the trigger node to point to the new API_URL
+    old_url = trigger_sync_node['parameters'].get('url', '')
+    if old_url:
+        new_url = re.sub(r'https?://[^/]+', API_URL.rstrip('/'), old_url)
+        trigger_sync_node['parameters']['url'] = new_url
+        
+    # Also update any Code node that uses the old URL
+    for node in data['nodes']:
+        if node['type'] == 'n8n-nodes-base.code':
+            js_code = node['parameters'].get('jsCode', '')
+            if js_code:
+                new_js = re.sub(r'https?://[^/]+(:\d+)?', API_URL.rstrip('/'), js_code)
+                node['parameters']['jsCode'] = new_js
+
     new_nodes = []
     new_nodes.extend(trigger_nodes)
     new_nodes.append(trigger_sync_node)
@@ -38,7 +58,7 @@ for filepath in files:
     new_nodes.append({
         'parameters': {
             'method': 'GET',
-            'url': f'=' + 'http://localhost:5001/job/{{ $(' + f"'{trigger_sync_name}'" + ').item.json.job_id }}',
+            'url': f'=' + f'{API_URL.rstrip("/")}/job/{{{{ $(' + f"'{trigger_sync_name}'" + ').item.json.job_id }}}}',
             'sendHeaders': True,
             'headerParameters': {
                 'parameters': [

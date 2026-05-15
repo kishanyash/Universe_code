@@ -2,6 +2,10 @@
 Quick test: Fetch one company from Supabase, run Yahoo + Screener scrapers,
 show results, and write back to Supabase.
 """
+if __name__ != "__main__":
+    import pytest
+    pytest.skip("utility script; not a pytest test module", allow_module_level=True)
+
 import os, sys, json, logging
 from dotenv import load_dotenv
 load_dotenv()

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+    color: #333;
+  }
+  h1, h2, h3 {
+    color: #2c3e50;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+  th, td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+  }
+  th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+  }
+  blockquote {
+    border-left: 4px solid #007bff;
+    background-color: #f8f9fa;
+    padding: 10px 20px;
+    margin: 0 0 20px 0;
+  }
+  .important {
+    border-left-color: #dc3545;
+    background-color: #fdf3f4;
+  }
+  .note {
+    border-left-color: #17a2b8;
+    background-color: #f4f8f9;
+  }
+  .tip {
+    border-left-color: #28a745;
+    background-color: #f4fdf5;
+  }
+  code {
+    background-color: #f4f4f4;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-family: monospace;
+  }
+</style>
+</head>
+<body>
+
+<h1>Equity Universe — Field Update Schedule & Documentation</h1>
+
+<blockquote>
+  <p><strong>Database:</strong> Supabase → <code>public.equity_universe</code><br>
+  <strong>Primary Key:</strong> <code>(company_id, isin_code)</code><br>
+  <strong>Unique Constraints:</strong> <code>isin_code</code>, <code>nse_code</code><br>
+  <strong>Last Updated:</strong> 2026-04-21<br>
+  <strong>Universe Size:</strong> ~895 stocks</p>
+</blockquote>
+
+<hr>
+
+<h2>1. Schedule Overview</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Frequency</th>
+      <th>When</th>
+      <th>Source(s)</th>
+      <th>Est. Runtime</th>
+      <th>Field Count</th>
+      <th>Purpose</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>One-Time</strong></td>
+      <td>On stock addition</td>
+      <td>Manual / Initial seed</td>
+      <td>—</td>
+      <td>~7</td>
+      <td>Identifiers that never change</td>
+    </tr>
+    <tr>
+      <td><strong>Daily</strong></td>
+      <td>Every day 6:30 AM IST</td>
+      <td>Yahoo Finance (yfinance API)</td>
+      <td>~20 min</td>
+      <td>~48</td>
+      <td>Prices, volume, returns, derived valuations</td>
+    </tr>
+    <tr>
+      <td><strong>Weekly</strong></td>
+      <td>Every Monday 7:30 AM IST</td>
+      <td>Screener.in (HTTP + BeautifulSoup)</td>
+      <td>~50 min</td>
+      <td>~83</td>
+      <td>TTM financials, ratios, balance sheet, quarterly results, sectors, FY actuals</td>
+    </tr>
+    <tr>
+      <td><strong>Biweekly</strong></td>
+      <td>1st & 15th 8:30 AM IST</td>
+      <td>Trendlyne + GoIndiaStocks (Selenium)</td>
+      <td>~3–4 hours</td>
+      <td>~65</td>
+      <td>Analyst targets, forward estimates (FY26E–FY28E)</td>
+    </tr>
+    <tr>
+      <td><strong>Quarterly</strong></td>
+      <td>Jan/Apr/Jul/Oct 1st, 9:30 AM IST</td>
+      <td>Screener.in (same as Weekly)</td>
+      <td>~50 min</td>
+      <td>~83</td>
+      <td>Post-earnings safety-net refresh</td>
+    </tr>
+  </tbody>
+</table>
+
+<blockquote class="important">
+  <p><strong>IMPORTANT:</strong> Each schedule scrapes <strong>only what is unique to that frequency</strong> — no duplication across schedules. When multiple sources provide the same field (e.g., <code>current_price</code> from Yahoo + Screener), the <strong>last writer wins</strong>.</p>
+</blockquote>
+
+<hr>
+
+<h2>2. One-Time / Static Fields</h2>
+
+<p>These are set <strong>once when a stock is added</strong> to the universe and rarely (if ever) change. Manual update only if a corporate action occurs (e.g., ticker change, demerger).</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th>When to Update</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><code>company_id</code></td><td><code>bigint</code> (identity)</td><td>Auto-generated primary key</td><td>Never (auto)</td></tr>
+    <tr><td>2</td><td><code>isin_code</code></td><td><code>text</code></td><td>ISIN (e.g., INE002A01018)</td><td>Never (immutable identifier)</td></tr>
+    <tr><td>3</td><td><code>nse_code</code></td><td><code>text</code></td><td>NSE ticker (e.g., RELIANCE)</td><td>Only on ticker change</td></tr>
+    <tr><td>4</td><td><code>bse_code</code></td><td><code>text</code></td><td>BSE scrip code (e.g., 500325)</td><td>Only on BSE code change</td></tr>
+    <tr><td>5</td><td><code>google_code</code></td><td><code>text</code></td><td>Google Finance code (e.g., NSE:RELIANCE)</td><td>Only on ticker change</td></tr>
+    <tr><td>6</td><td><code>nse_bom_code</code></td><td><code>text</code></td><td>BSE BOM code (e.g., BOM:500325)</td><td>Only on BSE code change</td></tr>
+    <tr><td>7</td><td><code>company_name</code></td><td><code>text</code></td><td>Company name</td><td>Only on name change (rare)</td></tr>
+  </tbody>
+</table>
+
+<blockquote class="note">
+  <p><strong>NOTE:</strong> <code>face_value</code> is listed under Weekly because stock splits can change it. However, it's functionally near-static for most companies.</p>
+</blockquote>
+
+<hr>
+
+<h2>3. Daily Fields</h2>
+
+<p><strong>Source:</strong> Yahoo Finance via <code>yfinance</code> Python API (no browser needed)<br>
+<strong>Schedule:</strong> Every day at 6:30 AM IST (01:00 UTC)<br>
+<strong>Runtime:</strong> ~20 minutes for 895 stocks</p>
+
+<h3>3a. Scraped from Yahoo Finance</h3>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Column</th><th>Unit</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><code>current_price</code></td><td>₹/share</td><td>Live market price</td></tr>
+    <tr><td>2</td><td><code>market_cap</code></td><td>₹ Crores</td><td>Market capitalization</td></tr>
+    <tr><td>3</td><td><code>enterprise_value</code></td><td>₹ Crores</td><td>MCap + Debt − Cash</td></tr>
+    <tr><td>4</td><td><code>volume</code></td><td>Shares</td><td>Daily trading volume</td></tr>
+    <tr><td>5</td><td><code>high_52_week</code></td><td>₹/share</td><td>52-week high price</td></tr>
+    <tr><td>6</td><td><code>low_52_week</code></td><td>₹/share</td><td>52-week low price</td></tr>
+    <tr><td>7</td><td><code>return_1m</code></td><td>%</td><td>1-month stock return</td></tr>
+    <tr><td>8</td><td><code>return_3m</code></td><td>%</td><td>3-month stock return</td></tr>
+    <tr><td>9</td><td><code>return_6m</code></td><td>%</td><td>6-month stock return</td></tr>
+    <tr><td>10</td><td><code>return_12m</code></td><td>%</td><td>12-month stock return</td></tr>
+    <tr><td>11</td><td><code>target_price_high</code></td><td>₹/share</td><td>Analyst highest target</td></tr>
+    <tr><td>12</td><td><code>target_price_low</code></td><td>₹/share</td><td>Analyst lowest target</td></tr>
+    <tr><td>13</td><td><code>consensus_target_price</code></td><td>₹/share</td><td>Analyst mean target</td></tr>
+    <tr><td>14</td><td><code>dividend_yield</code></td><td>%</td><td>Annual dividend yield</td></tr>
+    <tr><td>15</td><td><code>num_equity_shares</code></td><td>Crores</td><td>Total shares outstanding</td></tr>
+    <tr><td>16</td><td><code>revenue_fy2026e</code> / <code>revenue_fy26</code></td><td>₹ Crores</td><td>Revenue estimate FY2026</td></tr>
+    <tr><td>17</td><td><code>revenue_fy2027e</code> / <code>revenue_fy27</code></td><td>₹ Crores</td><td>Revenue estimate FY2027</td></tr>
+    <tr><td>18</td><td><code>revenue_fy2028e</code> / <code>revenue_fy28</code></td><td>₹ Crores</td><td>Revenue estimate FY2028</td></tr>
+    <tr><td>19</td><td><code>eps_fy2026e</code></td><td>₹/share</td><td>EPS estimate FY2026</td></tr>
+    <tr><td>20</td><td><code>eps_fy2027e</code></td><td>₹/share</td><td>EPS estimate FY2027</td></tr>
+    <tr><td>21</td><td><code>eps_fy2028e</code></td><td>₹/share</td><td>EPS estimate FY2028</td></tr>
+  </tbody>
+</table>
+
+<h3>3b. Calculated After Daily Scrape</h3>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Column</th><th>Formula</th><th>Unit</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><code>consensus_target_price</code></td><td>avg(target_high, target_low)</td><td>₹/share</td></tr>
+    <tr><td>2</td><td><code>consensus_upside_pct</code></td><td>(Consensus − Price) / Price × 100</td><td>%</td></tr>
+    <tr><td>3</td><td><code>potential_upside_high</code></td><td>(HighTarget − Price) / Price × 100</td><td>%</td></tr>
+    <tr><td>4</td><td><code>potential_upside_low</code></td><td>(LowTarget − Price) / Price × 100</td><td>%</td></tr>
+    <tr><td>5</td><td><code>return_down_from_52w_high</code></td><td>(Price − 52wHigh) / 52wHigh × 100</td><td>% (negative)</td></tr>
+    <tr><td>6</td><td><code>return_up_from_52w_low</code></td><td>(Price − 52wLow) / 52wLow × 100</td><td>% (positive)</td></tr>
+    <tr><td>7</td><td><code>pe_fy24</code></td><td>Current Price / EPS FY2024</td><td>Ratio (x)</td></tr>
+    <tr><td>8</td><td><code>pe_fy25</code></td><td>Current Price / EPS FY2025</td><td>Ratio (x)</td></tr>
+    <tr><td>9</td><td><code>pe_fy26</code></td><td>Current Price / EPS FY2026E</td><td>Ratio (x)</td></tr>
+    <tr><td>10</td><td><code>pe_fy27</code></td><td>Current Price / EPS FY2027E</td><td>Ratio (x)</td></tr>
+    <tr><td>11</td><td><code>pe_fy28</code></td><td>Current Price / EPS FY2028E</td><td>Ratio (x)</td></tr>
+    <tr><td>12</td><td><code>pb_fy24</code></td><td>Current Price / Book Value</td><td>Ratio (x)</td></tr>
+    <tr><td>13</td><td><code>pb_fy25</code></td><td>Current Price / Book Value</td><td>Ratio (x)</td></tr>
+    <tr><td>14</td><td><code>pb_fy26</code></td><td>Current Price / Book Value</td><td>Ratio (x)</td></tr>
+    <tr><td>15</td><td><code>pb_fy27</code></td><td>Current Price / Book Value</td><td>Ratio (x)</td></tr>
+    <tr><td>16</td><td><code>pb_fy28</code></td><td>Current Price / Book Value</td><td>Ratio (x)</td></tr>
+    <tr><td>17</td><td><code>sotp_value</code></td><td>target_price_high or current_price</td><td>₹/share</td></tr>
+    <tr><td>18</td><td><code>pe_ttm</code></td><td>Current Price / EPS TTM</td><td>Ratio (x)</td></tr>
+    <tr><td>19</td><td><code>ev_ebitda_ttm</code></td><td>Enterprise Value / EBITDA TTM</td><td>Ratio (x)</td></tr>
+    <tr><td>20</td><td><code>ps_ttm</code></td><td>Market Cap / Revenue TTM</td><td>Ratio (x)</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Total Daily: ~21 scraped + ~20 calculated ≈ 41+ fields</strong></p>
+
+<hr>
+
+<h2>4. Weekly Fields</h2>
+
+<p><strong>Source:</strong> Screener.in via HTTP GET + BeautifulSoup (no browser)<br>
+<strong>URL:</strong> <code>https://www.screener.in/company/{NSE_CODE}/consolidated/</code><br>
+<strong>Schedule:</strong> Every Monday at 7:30 AM IST (02:00 UTC)<br>
+<strong>Runtime:</strong> ~50 minutes for 895 stocks</p>
+
+<h3>4a. Top Ratios Bar</h3>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Column</th><th>Unit</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><code>current_price</code></td><td>₹/share</td><td>Current stock price</td></tr>
+    <tr><td>2</td><td><code>market_cap</code></td><td>₹ Crores</td><td>Market capitalization</td></tr>
+    <tr><td>3</td><td><code>high_52_week</code></td><td>₹/share</td><td>52-week high</td></tr>
+    <tr><td>4</td><td><code>low_52_week</code></td><td>₹/share</td><td>52-week low</td></tr>
+    <tr><td>5</td><td><code>pe_ttm</code></td><td>Ratio (x)</td><td>Price-to-Earnings TTM</td></tr>
+    <tr><td>6</td><td><code>book_value</code></td><td>₹/share</td><td>Book value per share</td></tr>
+    <tr><td>7</td><td><code>face_value</code></td><td>₹/share</td><td>Face value per share</td></tr>
+    <tr><td>8</td><td><code>dividend_yield</code></td><td>%</td><td>Dividend yield</td></tr>
+    <tr><td>9</td><td><code>roce</code></td><td>%</td><td>Return on Capital Employed</td></tr>
+    <tr><td>10</td><td><code>roe</code></td><td>%</td><td>Return on Equity</td></tr>
+  </tbody>
+</table>
+
+<h3>4b. Sector Classification</h3>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Column</th><th>Unit</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><code>broad_sector</code></td><td>Text</td><td>e.g., "Commodities"</td></tr>
+    <tr><td>2</td><td><code>sector</code></td><td>Text</td><td>e.g., "Oil & Gas"</td></tr>
+    <tr><td>3</td><td><code>broad_industry</code></td><td>Text</td><td>e.g., "Oil Exploration"</td></tr>
+    <tr><td>4</td><td><code>industry</code></td><td>Text</td><td>e.g., "Crude Oil"</td></tr>
+  </tbody>
+</table>
+
+<h3>4c. Quarterly Results</h3>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Column</th><th>Unit</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><code>quarterly_results_date</code></td><td>Date</td><td>Date of latest quarter results</td></tr>
+    <tr><td>2</td><td><code>sales_latest_qtr</code></td><td>₹ Crores</td><td>Revenue — latest quarter</td></tr>
+    <tr><td>3</td><td><code>op_profit_latest_qtr</code></td><td>₹ Crores</td><td>Operating profit — latest quarter</td></tr>
+    <tr><td>4</td><td><code>pat_latest_qtr</code></td><td>₹ Crores</td><td>PAT — latest quarter</td></tr>
+    <tr><td>5</td><td><code>ebitda_margin_latest_qtr</code></td><td>%</td><td>EBITDA margin — latest quarter</td></tr>
+    <tr><td>6</td><td><code>pat_margin_latest_qtr</code></td><td>%</td><td>PAT margin — latest quarter</td></tr>
+    <tr><td>7</td><td><code>sales_preceding_qtr</code></td><td>₹ Crores</td><td>Revenue — preceding quarter</td></tr>
+    <tr><td>8</td><td><code>op_profit_preceding_qtr</code></td><td>₹ Crores</td><td>Op profit — preceding quarter</td></tr>
+    <tr><td>9</td><td><code>pat_preceding_qtr</code></td><td>₹ Crores</td><td>PAT — preceding quarter</td></tr>
+    <tr><td>10</td><td><code>revenue_growth_qoq</code></td><td>%</td><td>Revenue QoQ growth</td></tr>
+    <tr><td>11</td><td><code>ebitda_growth_qoq</code></td><td>%</td><td>EBITDA QoQ growth</td></tr>
+    <tr><td>12</td><td><code>pat_growth_qoq</code></td><td>%</td><td>PAT QoQ growth</td></tr>
+    <tr><td>13</td><td><code>sales_growth_yoy_qtr</code></td><td>%</td><td>Revenue YoY (vs same qtr last yr)</td></tr>
+    <tr><td>14</td><td><code>profit_growth_yoy_qtr</code></td><td>%</td><td>Profit YoY (vs same qtr last yr)</td></tr>
+  </tbody>
+</table>
+
+<h3>4d. Profit & Loss — TTM</h3>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Column</th><th>Unit</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><code>sales_ttm_screener</code></td><td>₹ Crores</td><td>Revenue TTM</td></tr>
+    <tr><td>2</td><td><code>revenue_ttm</code></td><td>₹ Crores</td><td>Revenue TTM (same value)</td></tr>
+    <tr><td>3</td><td><code>op_profit_ttm</code></td><td>₹ Crores</td><td>Operating Profit TTM</td></tr>
+    <tr><td>4</td><td><code>ebitda_ttm</code></td><td>₹ Crores</td><td>EBITDA TTM (same as op_profit)</td></tr>
+    <tr><td>5</td><td><code>pat_ttm</code></td><td>₹ Crores</td><td>PAT TTM</td></tr>
+    <tr><td>6</td><td><code>pat_ttm_screener</code></td><td>₹ Crores</td><td>PAT TTM (same value)</td></tr>
+    <tr><td>7</td><td><code>eps_ttm</code></td><td>₹/share</td><td>EPS TTM</td></tr>
+    <tr><td>8</td><td><code>eps_ttm_actual</code></td><td>₹/share</td><td>EPS TTM actual (same)</td></tr>
+    <tr><td>9</td><td><code>ebitda_margin_ttm</code></td><td>%</td><td>EBITDA / Revenue × 100</td></tr>
+    <tr><td>10</td><td><code>pat_margin_ttm</code></td><td>%</td><td>PAT / Revenue × 100</td></tr>
+    <tr><td>11</td><td><code>opm_last_year</code></td><td>%</td><td>OPM of last full fiscal year</td></tr>
+  </tbody>
+</table>
+
+<h3>4e. Per-FY Actuals</h3>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Column</th><th>Unit</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><code>revenue_fy2023</code> / <code>revenue_fy23</code></td><td>₹ Crores</td><td>Revenue FY2023</td></tr>
+    <tr><td>2</td><td><code>revenue_fy2024</code> / <code>revenue_fy24</code></td><td>₹ Crores</td><td>Revenue FY2024</td></tr>
+    <tr><td>3</td><td><code>revenue_fy2025</code> / <code>revenue_fy25</code></td><td>₹ Crores</td><td>Revenue FY2025</td></tr>
+    <tr><td>4</td><td><code>ebitda_fy2023</code> / <code>ebitda_fy23</code></td><td>₹ Crores</td><td>EBITDA FY2023</td></tr>
+    <tr><td>5</td><td><code>ebitda_fy2024</code> / <code>ebitda_fy24</code></td><td>₹ Crores</td><td>EBITDA FY2024</td></tr>
+    <tr><td>6</td><td><code>ebitda_fy2025</code> / <code>ebitda_fy25</code></td><td>₹ Crores</td><td>EBITDA FY2025</td></tr>
+    <tr><td>7</td><td><code>pat_fy2023</code> / <code>pat_fy23</code></td><td>₹ Crores</td><td>PAT FY2023</td></tr>
+    <tr><td>8</td><td><code>pat_fy2024</code> / <code>pat_fy24</code></td><td>₹ Crores</td><td>PAT FY2024</td></tr>
+    <tr><td>9</td><td><code>pat_fy2025</code> / <code>pat_fy25</code></td><td>₹ Crores</td><td>PAT FY2025</td></tr>
+    <tr><td>10</td><td><code>eps_fy2023</code></td><td>₹/share</td><td>EPS FY2023</td></tr>
+    <tr><td>11</td><td><code>eps_fy2024</code></td><td>₹/share</td><td>EPS FY2024</td></tr>
+    <tr><td>12</td><td><code>eps_fy2025</code></td><td>₹/share</td><td>EPS FY2025</td></tr>
+  </tbody>
+</table>
+
+<h3>4f. Balance Sheet (latest year)</h3>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Column</th><th>Unit</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><code>debt</code></td><td>₹ Crores</td><td>Total borrowings</td></tr>
+    <tr><td>2</td><td><code>net_worth</code></td><td>₹ Crores</td><td>Equity Capital + Reserves</td></tr>
+    <tr><td>3</td><td><code>cash_equivalents</code></td><td>₹ Crores</td><td>Investments + 30% Other Assets</td></tr>
+    <tr><td>4</td><td><code>net_debt</code></td><td>₹ Crores</td><td>Debt − Cash</td></tr>
+    <tr><td>5</td><td><code>enterprise_value</code></td><td>₹ Crores</td><td>Market Cap + Net Debt</td></tr>
+    <tr><td>6</td><td><code>num_equity_shares</code></td><td>Crores</td><td>Equity Capital / Face Value</td></tr>
+    <tr><td>7</td><td><code>cwip</code></td><td>₹ Crores</td><td>Capital Work in Progress</td></tr>
+    <tr><td>8</td><td><code>net_block</code></td><td>₹ Crores</td><td>Net Block (Fixed Assets)</td></tr>
+  </tbody>
+</table>
+
+<h3>4g. Ratios & 4h. Shareholding</h3>
+
+<table>
+  <thead>
+    <tr><th>Column</th><th>Unit</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>roce</code></td><td>%</td><td>Return on Capital Employed</td></tr>
+    <tr><td><code>roe</code></td><td>%</td><td>Return on Equity</td></tr>
+    <tr><td><code>roic</code></td><td>%</td><td>Return on Invested Capital</td></tr>
+    <tr><td><code>asset_turnover_ratio</code></td><td>Ratio (x)</td><td>Revenue / Total Assets</td></tr>
+    <tr><td><code>working_capital_to_sales_ratio</code></td><td>Ratio (x)</td><td>Working Capital Days / 365</td></tr>
+    <tr><td><code>promoter_holding_pct</code></td><td>%</td><td>Promoter holding</td></tr>
+    <tr><td><code>unpledged_promoter_holding_pct</code></td><td>%</td><td>Unpledged promoter holding</td></tr>
+  </tbody>
+</table>
+
+<h3>4i. Weekly Calculated Fields</h3>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Column</th><th>Formula</th><th>Unit</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td><code>ebitda_margin_ttm_calc</code></td><td>EBITDA_TTM / Revenue_TTM * 100</td><td>%</td></tr>
+    <tr><td>2</td><td><code>pat_margin_ttm_calc</code></td><td>PAT_TTM / Revenue_TTM * 100</td><td>%</td></tr>
+    <tr><td>3</td><td><code>ebitda_margin_growth_qoq_bps</code></td><td>(Latest − Preceding margin) * 100</td><td>BPS</td></tr>
+    <tr><td>4</td><td><code>pat_margin_growth_qoq_bps</code></td><td>(Latest − Preceding margin) * 100</td><td>BPS</td></tr>
+    <tr><td>5</td><td><code>cwip_to_net_block_ratio</code></td><td>CWIP / Net Block * 100</td><td>%</td></tr>
+    <tr><td>6</td><td><code>return_down_from_52w_high</code></td><td>(Price − 52wHigh) / 52wHigh * 100</td><td>%</td></tr>
+    <tr><td>7</td><td><code>return_up_from_52w_low</code></td><td>(Price − 52wLow) / 52wLow * 100</td><td>%</td></tr>
+    <tr><td>8</td><td><code>ebitda_margin_fy2023</code></td><td>EBITDA / Revenue * 100</td><td>%</td></tr>
+    <tr><td>9</td><td><code>ebitda_margin_fy2024</code></td><td>EBITDA / Revenue * 100</td><td>%</td></tr>
+    <tr><td>10</td><td><code>ebitda_margin_fy2025</code></td><td>EBITDA / Revenue * 100</td><td>%</td></tr>
+    <tr><td>11</td><td><code>pat_margin_fy2023</code></td><td>PAT / Revenue * 100</td><td>%</td></tr>
+    <tr><td>12</td><td><code>pat_margin_fy2024</code></td><td>PAT / Revenue * 100</td><td>%</td></tr>
+    <tr><td>13</td><td><code>pat_margin_fy2025</code></td><td>PAT / Revenue * 100</td><td>%</td></tr>
+    <tr><td>14</td><td><code>last_annual_result_date</code></td><td>quarterly_results_date or fallback</td><td>Date</td></tr>
+    <tr><td>15</td><td><code>revenue_cagr_hist_2yr</code></td><td>CAGR(Revenue 2yr ago, Revenue TTM)</td><td>%</td></tr>
+    <tr><td>16</td><td><code>ebitda_cagr_hist_2yr</code></td><td>CAGR(EBITDA 2yr ago, EBITDA TTM)</td><td>%</td></tr>
+    <tr><td>17</td><td><code>pat_cagr_hist_2yr</code></td><td>CAGR(PAT 2yr ago, PAT TTM)</td><td>%</td></tr>
+    <tr><td>18</td><td><code>eps_cagr_hist_2yr</code></td><td>CAGR(EPS 2yr ago, EPS TTM)</td><td>%</td></tr>
+    <tr><td>19</td><td><code>pe_avg_3yr</code></td><td>CMP / Avg EPS of last 3 FYs</td><td>Ratio (x)</td></tr>
+    <tr><td>20</td><td><code>pe_avg_5yr</code></td><td>CMP / Avg EPS of last 5 FYs</td><td>Ratio (x)</td></tr>
+    <tr><td>21</td><td><code>pe_high_hist</code></td><td>CMP / Min historical EPS</td><td>Ratio (x)</td></tr>
+    <tr><td>22</td><td><code>pe_low_hist</code></td><td>CMP / Max historical EPS</td><td>Ratio (x)</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Total Weekly: ~65 scraped + ~22 calculated ≈ 87 fields</strong></p>
+
+<hr>
+
+<h2>5. Biweekly Fields</h2>
+
+<p><strong>Sources:</strong> Trendlyne (login, Selenium) + GoIndiaStocks (no login, Selenium)<br>
+<strong>Schedule:</strong> 1st & 15th of every month at 8:30 AM IST (03:00 UTC)<br>
+<strong>Runtime:</strong> ~3–4 hours for 895 stocks</p>
+
+<h3>5a. Target Prices & 5b. Actuals</h3>
+
+<table>
+  <thead>
+    <tr><th>Column</th><th>Unit</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>consensus_target_price</code></td><td>₹/share</td><td>Average analyst target price</td></tr>
+    <tr><td><code>target_price_high</code></td><td>₹/share</td><td>Highest analyst target</td></tr>
+    <tr><td><code>target_price_low</code></td><td>₹/share</td><td>Lowest analyst target</td></tr>
+    <tr><td><code>revenue_fy2023..fy2025</code></td><td>₹ Crores</td><td>Revenue actuals</td></tr>
+    <tr><td><code>ebitda_fy2023..fy2025</code></td><td>₹ Crores</td><td>EBITDA actuals</td></tr>
+    <tr><td><code>pat_fy2023..fy2025</code></td><td>₹ Crores</td><td>Net Profit actuals</td></tr>
+    <tr><td><code>eps_fy2023..fy2025</code></td><td>₹/share</td><td>EPS actuals</td></tr>
+  </tbody>
+</table>
+
+<h3>5c. Forward Estimates (Trendlyne + GoIndiaStocks)</h3>
+
+<table>
+  <thead>
+    <tr><th>Column</th><th>Unit</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>revenue_fy2026e..fy2028e</code></td><td>₹ Crores</td><td>Revenue estimates</td></tr>
+    <tr><td><code>ebitda_fy2026e..fy2028e</code></td><td>₹ Crores</td><td>EBITDA estimates</td></tr>
+    <tr><td><code>pat_fy2026e..fy2028e</code></td><td>₹ Crores</td><td>PAT estimates</td></tr>
+    <tr><td><code>eps_fy2026e..fy2028e</code></td><td>₹/share</td><td>EPS estimates</td></tr>
+  </tbody>
+</table>
+
+<h3>5e. Biweekly Calculated Fields</h3>
+
+<table>
+  <thead>
+    <tr><th>Column</th><th>Formula</th><th>Unit</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>ebitda_margin_fy2026e..fy2028e</code></td><td>EBITDA / Revenue * 100 per FY</td><td>%</td></tr>
+    <tr><td><code>pat_margin_fy2026e..fy2028e</code></td><td>PAT / Revenue * 100 per FY</td><td>%</td></tr>
+    <tr><td><code>ev_ebitda_fy2026e..fy2028e</code></td><td>Enterprise Value / EBITDA</td><td>Ratio (x)</td></tr>
+    <tr><td><code>ps_fy2026e..fy2028e</code></td><td>Market Cap / Revenue</td><td>Ratio (x)</td></tr>
+    <tr><td><code>revenue_cagr_fwd_2yr</code></td><td>CAGR(Revenue FY25, Revenue FY27E)</td><td>%</td></tr>
+    <tr><td><code>ebitda_cagr_fwd_2yr</code></td><td>CAGR(EBITDA FY25, EBITDA FY27E)</td><td>%</td></tr>
+    <tr><td><code>pat_cagr_fwd_2yr</code></td><td>CAGR(PAT FY25, PAT FY27E)</td><td>%</td></tr>
+    <tr><td><code>eps_cagr_fwd_2yr</code></td><td>CAGR(EPS FY25, EPS FY27E)</td><td>%</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Total Biweekly: ~45 scraped + ~20 calculated ≈ 65 fields</strong></p>
+
+<hr>
+
+<h2>6. Quarterly Fields</h2>
+
+<p><strong>Source:</strong> Screener.in (same as Weekly)<br>
+<strong>Schedule:</strong> 1st of Jan, Apr, Jul, Oct at 9:30 AM IST (04:00 UTC)</p>
+
+<blockquote class="tip">
+  <p><strong>PURPOSE:</strong> The quarterly run scrapes <strong>the exact same fields as Weekly</strong>. It acts as a post-earnings-season safety net to ensure new numbers are captured even if a weekly run had errors during earning dates.</p>
+</blockquote>
+
+<hr>
+
+<h2>7. System / Auto-Managed Fields</h2>
+
+<table>
+  <thead>
+    <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>created_at</code></td><td><code>timestamptz</code></td><td>Auto-set to UTC <code>now()</code> on INSERT</td></tr>
+    <tr><td><code>updated_at</code></td><td><code>timestamptz</code></td><td>Auto-set to UTC <code>now()</code> on INSERT/UPDATE</td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>10. Operational Notes</h2>
+
+<h3>Master Lookup (Sample Grouping)</h3>
+<p>There are over 160 columns, mostly driven by:</p>
+<ul>
+  <li><strong>Yahoo:</strong> Price, Volume, MCap, 52W High/Low, Daily Returns (1m-12m)</li>
+  <li><strong>Screener:</strong> P&amp;L (Sales, EBITDA, PAT) up to TTM, Margins, Balance Sheet (Debt, Cash, Net Block, CWIP)</li>
+  <li><strong>Analyst estimates:</strong> Targets, Forward FY26-FY28 values</li>
+</ul>
+
+<h3>Write Priority Order</h3>
+<p>When multiple scrapers write the same field, the <strong>last writer wins</strong>:</p>
+<code>Daily (6:30 AM) &rarr; Weekly (7:30 AM) &rarr; Biweekly (8:30 AM) &rarr; Quarterly (9:30 AM)</code>
+
+<blockquote class="important">
+  <p><strong>CAUTION:</strong> Never update <code>isin_code</code> or <code>company_id</code> &mdash; these are immutable identifiers.</p>
+</blockquote>
+
+</body>
+</html>

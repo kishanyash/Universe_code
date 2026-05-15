@@ -8,6 +8,7 @@ Fields updated:
   - return_1m, return_3m, return_6m, return_12m (%)
   - down_from_52w_high (%), up_from_52w_low (%)
   - beta, dividend_yield
+  - target prices intentionally excluded; Trendlyne owns those fields
 =============================================================================
 """
 import yfinance as yf
@@ -131,19 +132,6 @@ def scrape_yahoo_finance(company):
         except Exception as e:
             logger.debug(f"History error for {name}: {e}")
         
-        # ── Target Prices & Analyst Consensus ────────────────────────────
-        target_high = info.get("targetHighPrice")
-        if target_high:
-            result["target_price_high"] = safe_round(target_high, 2)
-            
-        target_low = info.get("targetLowPrice")
-        if target_low:
-            result["target_price_low"] = safe_round(target_low, 2)
-            
-        target_mean = info.get("targetMeanPrice")
-        if target_mean:
-            result["consensus_target_price"] = safe_round(target_mean, 2)
-
         # ── Analyst Estimates (FY26E & FY27E) ────────────────────────────
         try:
             # yfinance uses '0y' for the current fiscal year (FY26E) and '+1y' for next (FY27E)

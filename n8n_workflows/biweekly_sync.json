@@ -1,4 +1,4 @@
-{
+﻿{
     "name": "Biweekly Stock Data Sync",
     "nodes": [
         {
@@ -41,7 +41,7 @@
                         },
                         {
                             "name": "X-API-Secret",
-                            "value": "change-me-in-production"
+                            "value": "={{$env.API_SECRET}}"
                         }
                     ]
                 },
@@ -89,7 +89,7 @@
         },
         {
             "parameters": {
-                "jsCode": "// Wait 180 seconds before polling (Selenium scrapers are slow)\nawait new Promise(r => setTimeout(r, 180000));\n\nconst jobId = $('Trigger Biweekly Sync').first().json.job_id;\nconst resp = await this.helpers.httpRequest({\n  method: 'GET',\n  url: `http://72.61.226.16:5001/job/${jobId}`,\n  returnFullResponse: false,\n});\n\nreturn [{ json: resp }];"
+                "jsCode": "// Initial wait: 180s for Selenium scrapers to get going\nawait new Promise(r => setTimeout(r, 180000));\n\nconst jobId = $('Trigger Biweekly Sync').first().json.job_id;\nif (!jobId) {\n  return [{ json: { status: 'error', error: 'No job_id returned from trigger' } }];\n}\n\n// Poll up to 20 times, 60s apart (~20 min total after initial 3 min wait)\nconst MAX_RETRIES = 20;\nconst POLL_INTERVAL_MS = 60000;\n\nfor (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {\n  try {\n    const resp = await this.helpers.httpRequest({\n      method: 'GET',\n      url: `http://72.61.226.16:5001/job/${jobId}`,\n      returnFullResponse: true,\n    });\n\n    const body = typeof resp.body === 'string' ? JSON.parse(resp.body) : resp.body;\n    const statusCode = resp.statusCode || resp.status || 200;\n\n    if (statusCode === 404) {\n      return [{ json: { status: 'error', error: 'Job not found (server may have restarted). Job ID: ' + jobId } }];\n    }\n\n    // If completed or errored, return immediately\n    if (body.status === 'completed' || body.status === 'error') {\n      return [{ json: body }];\n    }\n\n    // Still running â€” wait and retry\n    if (attempt < MAX_RETRIES) {\n      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));\n    }\n  } catch (e) {\n    const errMsg = e.message || String(e);\n    if (errMsg.includes('404')) {\n      return [{ json: { status: 'error', error: 'Job not found (server may have restarted). Job ID: ' + jobId } }];\n    }\n    if (errMsg.includes('ECONNREFUSED') || errMsg.includes('ETIMEDOUT')) {\n      // Server is down â€” wait and retry\n      if (attempt < MAX_RETRIES) {\n        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));\n        continue;\n      }\n      return [{ json: { status: 'error', error: 'Server unreachable after ' + MAX_RETRIES + ' attempts. Job ID: ' + jobId } }];\n    }\n    return [{ json: { status: 'error', error: errMsg } }];\n  }\n}\n\nreturn [{ json: { status: 'error', error: 'Job still running after max poll attempts. Job ID: ' + jobId } }];"
             },
             "id": "biweekly-poll",
             "name": "Poll Job Status",
@@ -132,13 +132,13 @@
                     "string": [
                         {
                             "name": "message",
-                            "value": "✅ Biweekly sync completed successfully!\nJob ID: {{ $json.job_id }}\nResult: {{ JSON.stringify($json.result) }}"
+                            "value": "âœ… Biweekly sync completed successfully!\nJob ID: {{ $json.job_id }}\nResult: {{ JSON.stringify($json.result) }}"
                         }
                     ]
                 }
             },
             "id": "biweekly-success",
-            "name": "✅ Success",
+            "name": "âœ… Success",
             "type": "n8n-nodes-base.set",
             "typeVersion": 3.4,
             "position": [
@@ -152,13 +152,13 @@
                     "string": [
                         {
                             "name": "message",
-                            "value": "❌ Biweekly sync failed!\nStatus: {{ $json.status }}\nError: {{ $json.error || 'Unknown error' }}"
+                            "value": "âŒ Biweekly sync failed!\nStatus: {{ $json.status }}\nError: {{ $json.error || 'Unknown error' }}"
                         }
                     ]
                 }
             },
             "id": "biweekly-error",
-            "name": "❌ Error",
+            "name": "âŒ Error",
             "type": "n8n-nodes-base.set",
             "typeVersion": 3.4,
             "position": [
@@ -201,7 +201,7 @@
                 ],
                 [
                     {
-                        "node": "❌ Error",
+                        "node": "âŒ Error",
                         "type": "main",
                         "index": 0
                     }
@@ -230,7 +230,7 @@
                 ],
                 [
                     {
-                        "node": "✅ Success",
+                        "node": "âœ… Success",
                         "type": "main",
                         "index": 0
                     }

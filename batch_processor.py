@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from supabase import create_client, Client
 from config import SUPABASE_URL, SUPABASE_KEY, SUPABASE_TABLE, BATCH_CONFIG, SCHEDULES, VALID_COLUMNS
 from scrapers import SCRAPER_MAP
-from utils import chunks
+from utils import chunks, clean_bse_code
 from calculations import calculate_derived_fields
 
 logger = logging.getLogger("all_fetching.batch")
@@ -48,7 +48,7 @@ def fetch_all_companies(supabase, limit=None, offset=0, isin_list=None):
         List of company dicts
     """
     query = supabase.table(SUPABASE_TABLE).select(
-        "company_id, company_name, nse_code, bse_code, isin_code"
+        "company_id, company_name, nse_code, bse_code, isin_code, quarterly_results_date"
     ).order("company_id")
     
     if isin_list:
@@ -60,6 +60,10 @@ def fetch_all_companies(supabase, limit=None, offset=0, isin_list=None):
         query = query.limit(limit)
     
     response = query.execute()
+    # Clean bse_code: strip .0 suffix that Supabase may return
+    for company in response.data:
+        if company.get("bse_code"):
+            company["bse_code"] = clean_bse_code(company["bse_code"])
     return response.data
 
 
@@ -79,6 +83,10 @@ def update_company(supabase, isin_code, data):
     
     if not filtered:
         return False
+    
+    # Clean bse_code before writing to DB — prevent .0 suffix
+    if "bse_code" in filtered and filtered["bse_code"]:
+        filtered["bse_code"] = clean_bse_code(filtered["bse_code"])
     
     filtered["updated_at"] = datetime.now(timezone.utc).isoformat()
     

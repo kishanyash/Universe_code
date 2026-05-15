@@ -1,2 +1,2 @@
-Hist rows: 247
-First close: 1209.718505859375, last close: 1428.0
+Hist rows: 248
+First close: 1199.21044921875, last close: 1410.5
